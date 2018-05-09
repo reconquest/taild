@@ -1,14 +1,20 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	"os/exec"
 	"strconv"
+	"syscall"
+	"time"
 
 	"github.com/docopt/docopt-go"
 	"github.com/gorilla/websocket"
+	"github.com/reconquest/karma-go"
+	"github.com/reconquest/sign-go"
 )
 
 var (
@@ -48,11 +54,36 @@ func main() {
 		filename: filename,
 	}
 
-	http.Handle("/", handler)
+	server := &http.Server{
+		Addr:    args["--listen"].(string),
+		Handler: handler,
+	}
 
-	err = http.ListenAndServe(args["--listen"].(string), nil)
-	if err != nil {
-		log.Fatal(err)
+	go sign.Notify(func(signal os.Signal) bool {
+		log.Printf("got signal, shutting down service")
+
+		ctx, _ := context.WithTimeout(context.Background(), time.Second*20)
+
+		err := server.Shutdown(ctx)
+		if err != nil {
+			log.Fatalln(karma.Format(err, "unable to shut down server"))
+			return false
+		}
+
+		log.Printf("http service has been shut down")
+
+		return false
+	}, syscall.SIGTERM)
+
+	err = server.ListenAndServe()
+	if err != nil && err != http.ErrServerClosed {
+		log.Fatalln(
+			karma.Format(
+				err,
+				"unable to start http server at %q",
+				server.Addr,
+			),
+		)
 	}
 }
 
@@ -104,6 +135,7 @@ func (handler *Handler) ServeHTTP(
 
 	cmd := exec.Command("tail", params...)
 	cmd.Stdout = writer
+	cmd.Stderr = writer
 
 	err = cmd.Start()
 	if err != nil {
