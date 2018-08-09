@@ -63,13 +63,15 @@ func main() {
 
 	log.Printf("connected to %s", address)
 
-	_, reader, err := connection.NextReader()
-	if err != nil {
-		log.Fatal(err)
-	}
+	for {
+		_, reader, err := connection.NextReader()
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	_, err = io.Copy(os.Stdout, reader)
-	if err != nil {
-		log.Fatal(err)
+		_, err = io.Copy(os.Stdout, reader)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
